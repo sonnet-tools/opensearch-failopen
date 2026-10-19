@@ -507,3 +507,5 @@ final class Bootstrap {
     }
 
 }
+
+// lab: benign no-op comment for C1 control (typo fix placeholder)
